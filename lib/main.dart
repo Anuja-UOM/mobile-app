@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
 import 'dart:async';
@@ -30,11 +30,13 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Location Tracker',
+      title: 'Location Tracker PWA',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
         textTheme: GoogleFonts.poppinsTextTheme(),
+        // PWA-optimized theme
+        visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
       home: const LocationTrackerPage(),
       debugShowCheckedModeBanner: false,
@@ -53,15 +55,16 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
   Position? _currentPosition;
   bool _isTracking = false;
   bool _permissionGranted = false;
-  bool _firebaseInitialized = false;
   String _statusMessage = 'Tap to start location tracking';
   Timer? _locationTimer;
   FirebaseFirestore? _firestore;
   String? _deviceId;
+  bool _isPWA = false;
 
   @override
   void initState() {
     super.initState();
+    _detectPWA();
     _initializeApp();
   }
 
@@ -71,17 +74,23 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
     super.dispose();
   }
 
+  void _detectPWA() {
+    // Detect if running as PWA
+    _isPWA = kIsWeb;
+    if (_isPWA) {
+      print('Running as Progressive Web App');
+    }
+  }
+
   Future<void> _initializeApp() async {
     _deviceId = _generateDeviceId();
 
     // Check if Firebase is available
     try {
       _firestore = FirebaseFirestore.instance;
-      _firebaseInitialized = true;
       print('Firestore connection established');
     } catch (e) {
       print('Firestore not available: $e');
-      _firebaseInitialized = false;
     }
 
     await _checkPermissions();
@@ -302,6 +311,39 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
                             ],
                           ),
                         ),
+                        const SizedBox(height: 8),
+                        // PWA Status Indicator
+                        if (_isPWA)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.blue),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.web,
+                                  size: 16,
+                                  color: Colors.blue,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Progressive Web App',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.blue,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
                   ),
