@@ -39,12 +39,13 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIza-demo-key-replace-with-real',
-    appId: '1:123456789:web:abcdef123456',
-    messagingSenderId: '123456789',
-    projectId: 'mobile-app-location-demo',
-    authDomain: 'mobile-app-location-demo.firebaseapp.com',
-    storageBucket: 'mobile-app-location-demo.appspot.com',
+    apiKey: "AIzaSyCvSnYEIuPUNfSNJrj5vpSFjcaX24YEsM4",
+    authDomain: "mobile-app-location-b5ce8.firebaseapp.com",
+    projectId: "mobile-app-location-b5ce8",
+    storageBucket: "mobile-app-location-b5ce8.firebasestorage.app",
+    messagingSenderId: "1018454247619",
+    appId: "1:1018454247619:web:0df27e4eb2979fd6bafa76",
+    measurementId: "G-SRFPRP32XM",
   );
 
   static const FirebaseOptions android = FirebaseOptions(
