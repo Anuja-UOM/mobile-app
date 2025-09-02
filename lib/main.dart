@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
@@ -57,7 +57,7 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
   bool _permissionGranted = false;
   String _statusMessage = 'Tap to start location tracking';
   Timer? _locationTimer;
-  FirebaseFirestore? _firestore;
+  DatabaseReference? _database;
   String? _deviceId;
   bool _isPWA = false;
 
@@ -87,10 +87,10 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
 
     // Check if Firebase is available
     try {
-      _firestore = FirebaseFirestore.instance;
-      print('Firestore connection established');
+      _database = FirebaseDatabase.instance.ref();
+      print('Firebase Realtime Database connection established');
     } catch (e) {
-      print('Firestore not available: $e');
+      print('Firebase Database not available: $e');
     }
 
     await _checkPermissions();
@@ -147,7 +147,7 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
         _currentPosition = position;
       });
 
-      await _saveLocationToFirestore(position);
+      await _saveLocationToDatabase(position);
     } catch (e) {
       setState(() {
         _statusMessage = 'Error getting location: $e';
@@ -155,8 +155,8 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
     }
   }
 
-  Future<void> _saveLocationToFirestore(Position position) async {
-    if (_firestore == null) {
+  Future<void> _saveLocationToDatabase(Position position) async {
+    if (_database == null) {
       setState(() {
         _statusMessage = 'Location updated (Firebase not configured)';
       });
@@ -164,14 +164,11 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
     }
 
     try {
-      await _firestore!.collection('locations').doc(_deviceId).set({
+      // Save only longitude and latitude to Firebase Realtime Database
+      await _database!.child('gps1').set({
         'latitude': position.latitude,
         'longitude': position.longitude,
-        'accuracy': position.accuracy,
-        'timestamp': FieldValue.serverTimestamp(),
-        'altitude': position.altitude,
-        'speed': position.speed,
-      }, SetOptions(merge: true));
+      });
 
       setState(() {
         _statusMessage = 'Location saved to Firebase successfully';
@@ -273,12 +270,12 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: _firestore != null
+                            color: _database != null
                                 ? Colors.green.withOpacity(0.1)
                                 : Colors.orange.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                              color: _firestore != null
+                              color: _database != null
                                   ? Colors.green
                                   : Colors.orange,
                             ),
@@ -287,23 +284,23 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                _firestore != null
+                                _database != null
                                     ? Icons.cloud_done
                                     : Icons.cloud_off,
                                 size: 16,
-                                color: _firestore != null
+                                color: _database != null
                                     ? Colors.green
                                     : Colors.orange,
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                _firestore != null
+                                _database != null
                                     ? 'Firebase Connected'
                                     : 'Firebase Offline',
                                 style: GoogleFonts.poppins(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
-                                  color: _firestore != null
+                                  color: _database != null
                                       ? Colors.green
                                       : Colors.orange,
                                 ),
