@@ -196,7 +196,7 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
     _getCurrentLocation();
 
     // Set up periodic location updates
-    _locationTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+    _locationTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       _getCurrentLocation();
     });
   }
@@ -381,15 +381,14 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
                           ),
                           const SizedBox(height: 8),
                           _buildLocationRow(
-                            Icons.speed,
-                            'Accuracy',
-                            '${_currentPosition!.accuracy.toStringAsFixed(1)}m',
-                          ),
-                          const SizedBox(height: 8),
-                          _buildLocationRow(
                             Icons.access_time,
                             'Last Updated',
-                            '${DateTime.now().toLocal().toString().split('.')[0]}',
+                            _currentPosition!.timestamp != null
+                                ? _currentPosition!.timestamp!
+                                      .toLocal()
+                                      .toString()
+                                      .split('.')[0]
+                                : 'Unknown',
                           ),
                         ],
                       ),
