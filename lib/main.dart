@@ -4,10 +4,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'firebase_options.dart';
 import 'dart:async';
-import 'dart:math';
+import 'dart:html' as html;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,13 +62,11 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
   DatabaseReference? _database;
   String? _deviceId;
   bool _isPWA = false;
-  late FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin;
 
   @override
   void initState() {
     super.initState();
     _detectPWA();
-    _initializeNotifications();
     _initializeApp();
   }
 
@@ -104,42 +101,6 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
   String _generateDeviceId() {
     // Simple device ID generation - use device_info_plus for production
     return 'device_${DateTime.now().millisecondsSinceEpoch}';
-  }
-
-  Future<void> _initializeNotifications() async {
-    _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-
-    // Android notification settings
-    const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    // iOS notification settings
-    const DarwinInitializationSettings initializationSettingsIOS =
-        DarwinInitializationSettings(
-          requestAlertPermission: true,
-          requestBadgePermission: true,
-          requestSoundPermission: true,
-        );
-
-    // Initialization settings for all platforms
-    const InitializationSettings initializationSettings =
-        InitializationSettings(
-          android: initializationSettingsAndroid,
-          iOS: initializationSettingsIOS,
-          macOS: initializationSettingsIOS,
-        );
-
-    // Initialize notifications
-    await _flutterLocalNotificationsPlugin.initialize(initializationSettings);
-
-    // Request permissions for iOS/macOS
-    if (!kIsWeb) {
-      await _flutterLocalNotificationsPlugin
-          .resolvePlatformSpecificImplementation<
-            IOSFlutterLocalNotificationsPlugin
-          >()
-          ?.requestPermissions(alert: true, badge: true, sound: true);
-    }
   }
 
   Future<void> _checkPermissions() async {
@@ -179,29 +140,6 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
   }
 
   Future<void> _showVicinityNotification() async {
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
-        AndroidNotificationDetails(
-          'vicinity_channel',
-          'Vicinity Notifications',
-          channelDescription: 'Notifications when user leaves vicinity',
-          importance: Importance.high,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
-        );
-
-    const DarwinNotificationDetails iOSPlatformChannelSpecifics =
-        DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-        );
-
-    const NotificationDetails platformChannelSpecifics = NotificationDetails(
-      android: androidPlatformChannelSpecifics,
-      iOS: iOSPlatformChannelSpecifics,
-      macOS: iOSPlatformChannelSpecifics,
-    );
-
     double distance = 0;
     if (_lastRecordedPosition != null && _currentPosition != null) {
       distance = Geolocator.distanceBetween(
@@ -212,12 +150,22 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
       );
     }
 
-    await _flutterLocalNotificationsPlugin.show(
-      0,
-      'Vicinity Alert',
-      'You have left the vicinity! Distance moved: ${distance.toStringAsFixed(1)} meters',
-      platformChannelSpecifics,
-    );
+    // Show browser notification for web
+    if (kIsWeb) {
+      try {
+        html.Notification.requestPermission().then((permission) {
+          if (permission == 'granted') {
+            html.Notification(
+              'Vicinity Alert!',
+              body:
+                  'You have left the vicinity! Distance moved: ${distance.toStringAsFixed(1)} meters',
+            );
+          }
+        });
+      } catch (e) {
+        print('Notification error: $e');
+      }
+    }
   }
 
   Future<void> _getCurrentLocation() async {
