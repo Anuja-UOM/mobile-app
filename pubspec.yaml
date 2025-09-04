@@ -45,6 +45,9 @@ dependencies:
   
   # UI components
   google_fonts: ^6.2.1
+  
+  # Notifications
+  flutter_local_notifications: ^17.2.4
 
 dev_dependencies:
   flutter_test:

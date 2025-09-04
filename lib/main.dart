@@ -4,8 +4,10 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'firebase_options.dart';
 import 'dart:async';
+import 'dart:math';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,6 +55,7 @@ class LocationTrackerPage extends StatefulWidget {
 
 class _LocationTrackerPageState extends State<LocationTrackerPage> {
   Position? _currentPosition;
+  Position? _lastRecordedPosition;
   bool _isTracking = false;
   bool _permissionGranted = false;
   String _statusMessage = 'Tap to start location tracking';
@@ -60,11 +63,13 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
   DatabaseReference? _database;
   String? _deviceId;
   bool _isPWA = false;
+  late FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin;
 
   @override
   void initState() {
     super.initState();
     _detectPWA();
+    _initializeNotifications();
     _initializeApp();
   }
 
@@ -99,6 +104,42 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
   String _generateDeviceId() {
     // Simple device ID generation - use device_info_plus for production
     return 'device_${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  Future<void> _initializeNotifications() async {
+    _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
+    // Android notification settings
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    // iOS notification settings
+    const DarwinInitializationSettings initializationSettingsIOS =
+        DarwinInitializationSettings(
+          requestAlertPermission: true,
+          requestBadgePermission: true,
+          requestSoundPermission: true,
+        );
+
+    // Initialization settings for all platforms
+    const InitializationSettings initializationSettings =
+        InitializationSettings(
+          android: initializationSettingsAndroid,
+          iOS: initializationSettingsIOS,
+          macOS: initializationSettingsIOS,
+        );
+
+    // Initialize notifications
+    await _flutterLocalNotificationsPlugin.initialize(initializationSettings);
+
+    // Request permissions for iOS/macOS
+    if (!kIsWeb) {
+      await _flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >()
+          ?.requestPermissions(alert: true, badge: true, sound: true);
+    }
   }
 
   Future<void> _checkPermissions() async {
@@ -137,15 +178,91 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
     });
   }
 
+  Future<void> _showVicinityNotification() async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+          'vicinity_channel',
+          'Vicinity Notifications',
+          channelDescription: 'Notifications when user leaves vicinity',
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+        );
+
+    const DarwinNotificationDetails iOSPlatformChannelSpecifics =
+        DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        );
+
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+      android: androidPlatformChannelSpecifics,
+      iOS: iOSPlatformChannelSpecifics,
+      macOS: iOSPlatformChannelSpecifics,
+    );
+
+    double distance = 0;
+    if (_lastRecordedPosition != null && _currentPosition != null) {
+      distance = Geolocator.distanceBetween(
+        _lastRecordedPosition!.latitude,
+        _lastRecordedPosition!.longitude,
+        _currentPosition!.latitude,
+        _currentPosition!.longitude,
+      );
+    }
+
+    await _flutterLocalNotificationsPlugin.show(
+      0,
+      'Vicinity Alert',
+      'You have left the vicinity! Distance moved: ${distance.toStringAsFixed(1)} meters',
+      platformChannelSpecifics,
+    );
+  }
+
   Future<void> _getCurrentLocation() async {
     try {
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      setState(() {
-        _currentPosition = position;
-      });
+      // Check if user has moved more than 10 meters from last recorded position
+      if (_lastRecordedPosition != null) {
+        double distance = Geolocator.distanceBetween(
+          _lastRecordedPosition!.latitude,
+          _lastRecordedPosition!.longitude,
+          position.latitude,
+          position.longitude,
+        );
+
+        // If distance is greater than 10 meters, show notification and update last recorded position
+        if (distance > 10.0) {
+          setState(() {
+            _currentPosition = position;
+          });
+
+          await _showVicinityNotification();
+          _lastRecordedPosition = position;
+
+          setState(() {
+            _statusMessage =
+                'Vicinity alert! Moved ${distance.toStringAsFixed(1)}m from last position';
+          });
+        } else {
+          setState(() {
+            _currentPosition = position;
+            _statusMessage =
+                'Location updated - within vicinity (${distance.toStringAsFixed(1)}m)';
+          });
+        }
+      } else {
+        // First location reading
+        _lastRecordedPosition = position;
+        setState(() {
+          _currentPosition = position;
+          _statusMessage = 'Initial location recorded';
+        });
+      }
 
       await _saveLocationToDatabase(position);
     } catch (e) {
@@ -196,7 +313,7 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
     _getCurrentLocation();
 
     // Set up periodic location updates
-    _locationTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+    _locationTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
       _getCurrentLocation();
     });
   }
@@ -383,12 +500,19 @@ class _LocationTrackerPageState extends State<LocationTrackerPage> {
                           _buildLocationRow(
                             Icons.access_time,
                             'Last Updated',
-                            _currentPosition!.timestamp != null
-                                ? _currentPosition!.timestamp!
-                                      .toLocal()
-                                      .toString()
-                                      .split('.')[0]
-                                : 'Unknown',
+                            _currentPosition!.timestamp
+                                .toLocal()
+                                .toString()
+                                .split('.')[0],
+                          ),
+                          const SizedBox(height: 8),
+                          _buildLocationRow(
+                            Icons.near_me,
+                            'Distance from Last',
+                            _lastRecordedPosition != null &&
+                                    _currentPosition != null
+                                ? '${Geolocator.distanceBetween(_lastRecordedPosition!.latitude, _lastRecordedPosition!.longitude, _currentPosition!.latitude, _currentPosition!.longitude).toStringAsFixed(1)}m'
+                                : 'First reading',
                           ),
                         ],
                       ),
